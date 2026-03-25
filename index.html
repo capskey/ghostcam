@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GHOST CAM v2</title>
+<title>GHOST CAM v3</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;700&display=swap');
   :root {
@@ -133,7 +133,7 @@
 <body>
 <header>
   <div class="logo">GHOST<span>CAM</span></div>
-  <span class="ver">v2</span>
+  <span class="ver">v3</span>
   <div class="tagline">// 人が消えるカメラ</div>
 </header>
 <main>
@@ -230,10 +230,10 @@
   </div>
 
   <div class="info">
-    <b>v2 改善点：</b><br>
-    🔴 <b>手動停止</b> — プレビューを見ながら「消えた」と思ったら止める<br>
-    🚫 <b>ブレ自動除外</b> — 手ブレが大きいフレームを自動でスキップ<br>
-    👁 <b>リアルタイムプレビュー</b> — 数フレームごとに合成結果を更新<br>
+    <b>v3 追加：輝度重心アライメント</b><br>
+    📐 各フレームの輝度重心を計算 → 基準フレームとのズレを補正してから合成<br>
+    平行移動の手ブレに有効。夜景の光点が特徴点として機能します。<br>
+    🔴 <b>手動停止</b> / 🚫 <b>ブレ自動除外</b> / 👁 <b>リアルタイムプレビュー</b><br>
     💡 FPSは低くてOK。時間をかけるほど精度が上がります。
   </div>
 </main>
@@ -245,7 +245,23 @@ let stream = null, frames = [], capturing = false;
 let captureInterval = null, timerInterval = null;
 let startTime = null, lastFrameData = null;
 let droppedCount = 0, previewUpdateCounter = 0;
-const PREVIEW_UPDATE_EVERY = 3; // フレームごとにプレビュー更新
+let refCentroid = null; // 基準フレームの輝度重心
+const PREVIEW_UPDATE_EVERY = 3;
+
+// 輝度重心を計算（サンプリングで高速化）
+function calcCentroid(data, w, h) {
+  let wx = 0, wy = 0, total = 0;
+  const step = 4; // 4ピクセルごとにサンプル
+  for (let y = 0; y < h; y += step) {
+    for (let x = 0; x < w; x += step) {
+      const i = (y * w + x) * 4;
+      const lum = data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114;
+      wx += x * lum; wy += y * lum; total += lum;
+    }
+  }
+  if (total === 0) return { cx: w / 2, cy: h / 2 };
+  return { cx: wx / total, cy: wy / total };
+}
 
 const video = document.getElementById('video');
 const previewCanvas = document.getElementById('preview-canvas');
@@ -278,7 +294,7 @@ async function startCamera() {
 function startCapture() {
   if (capturing) return;
   capturing = true; frames = []; droppedCount = 0;
-  lastFrameData = null; startTime = Date.now();
+  lastFrameData = null; refCentroid = null; startTime = Date.now();
 
   const fps = parseInt(document.getElementById('fps').value);
   const interval = 1000 / fps;
@@ -348,7 +364,22 @@ function captureFrameWithShakeDetect() {
     return;
   }
 
-  frames.push(frameData.slice());
+  frames.push({ data: frameData.slice(), dx: 0, dy: 0 });
+
+  // 輝度重心でオフセットを計算
+  const cw = captureCanvas.width, ch = captureCanvas.height;
+  const centroid = calcCentroid(frameData, cw, ch);
+  if (!refCentroid) {
+    refCentroid = centroid; // 最初のフレームを基準に
+    frames[frames.length - 1].dx = 0;
+    frames[frames.length - 1].dy = 0;
+  } else {
+    // 整数ピクセルに丸める（過補正防止のため±20px上限）
+    const dx = Math.round(Math.max(-20, Math.min(20, refCentroid.cx - centroid.cx)));
+    const dy = Math.round(Math.max(-20, Math.min(20, refCentroid.cy - centroid.cy)));
+    frames[frames.length - 1].dx = dx;
+    frames[frames.length - 1].dy = dy;
+  }
   document.getElementById('stat-frames').textContent = frames.length;
   setStatus(`REC — ${frames.length}フレーム取得済み`);
 
@@ -374,13 +405,25 @@ function updatePreview(isFinal = false) {
   const mid = Math.floor(fn / 2);
   const vals = new Array(fn);
 
-  for (let i = 0; i < pixelCount; i += 4) {
-    for (let c = 0; c < 3; c++) {
-      for (let f = 0; f < fn; f++) vals[f] = useFrames[f][i + c];
-      vals.sort((a, b) => a - b);
-      result[i + c] = fn % 2 === 1 ? vals[mid] : (vals[mid - 1] + vals[mid]) >> 1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        let count = 0;
+        for (let f = 0; f < fn; f++) {
+          const { data, dx, dy } = useFrames[f];
+          const sx = x - dx, sy = y - dy;
+          // 範囲外はスキップ
+          if (sx < 0 || sx >= w || sy < 0 || sy >= h) continue;
+          vals[count++] = data[(sy * w + sx) * 4 + c];
+        }
+        if (count === 0) { result[i + c] = 0; continue; }
+        const vslice = vals.slice(0, count).sort((a, b) => a - b);
+        const m = Math.floor(count / 2);
+        result[i + c] = count % 2 === 1 ? vslice[m] : (vslice[m - 1] + vslice[m]) >> 1;
+      }
+      result[i + 3] = 255;
     }
-    result[i + 3] = 255;
   }
 
   // Draw to preview
@@ -430,7 +473,7 @@ function stopCapture() {
 function setStatus(msg) { document.getElementById('status-text').textContent = msg; }
 
 function resetApp() {
-  frames = []; droppedCount = 0; lastFrameData = null;
+  frames = []; droppedCount = 0; lastFrameData = null; refCentroid = null;
   document.getElementById('result-section').classList.remove('visible');
   document.getElementById('viewfinder-preview').classList.remove('has-preview');
   document.getElementById('capture-btn').disabled = false;
