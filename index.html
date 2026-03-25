@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GHOST CAM</title>
+<title>GHOST CAM v2</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;700&display=swap');
   :root {
@@ -26,44 +26,105 @@
   header { width: 100%; max-width: 680px; padding: 20px 16px 8px; display: flex; align-items: baseline; gap: 12px; }
   .logo { font-family: 'Space Mono', monospace; font-size: 1.3rem; font-weight: 700; color: var(--accent); text-shadow: 0 0 20px rgba(0,229,255,0.4); }
   .logo span { color: var(--accent2); }
-  .tagline { font-size: 0.65rem; color: var(--muted); font-family: 'Space Mono', monospace; letter-spacing: 0.05em; }
+  .ver { font-size: 0.6rem; color: var(--muted); font-family: 'Space Mono', monospace; background: var(--surface); border: 1px solid var(--border); padding: 2px 6px; border-radius: 2px; }
+  .tagline { font-size: 0.65rem; color: var(--muted); font-family: 'Space Mono', monospace; letter-spacing: 0.05em; margin-left: auto; }
+
   main { width: 100%; max-width: 680px; padding: 0 12px 32px; display: flex; flex-direction: column; gap: 12px; }
-  .viewfinder { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
-  .viewfinder video, .viewfinder canvas.preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-  canvas.preview { display: none; }
-  .corner { position: absolute; width: 18px; height: 18px; border-color: var(--accent); border-style: solid; opacity: 0.6; z-index: 10; }
-  .corner.tl { top: 10px; left: 10px; border-width: 2px 0 0 2px; }
-  .corner.tr { top: 10px; right: 10px; border-width: 2px 2px 0 0; }
-  .corner.bl { bottom: 10px; left: 10px; border-width: 0 0 2px 2px; }
-  .corner.br { bottom: 10px; right: 10px; border-width: 0 2px 2px 0; }
-  .status-bar { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.85)); padding: 18px 12px 8px; display: flex; align-items: center; gap: 8px; z-index: 10; font-family: 'Space Mono', monospace; font-size: 0.65rem; }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+
+  /* Dual viewfinder */
+  .viewfinders { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .vf-wrap { display: flex; flex-direction: column; gap: 4px; }
+  .vf-label { font-family: 'Space Mono', monospace; font-size: 0.58rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .viewfinder {
+    position: relative; width: 100%; aspect-ratio: 4/3;
+    background: #000; border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+  }
+  .viewfinder.preview-vf { border-color: rgba(0,229,255,0.2); }
+  .viewfinder.preview-vf.has-preview { border-color: var(--accent); box-shadow: 0 0 12px rgba(0,229,255,0.15); }
+
+  .viewfinder video, .viewfinder canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+  .corner { position: absolute; width: 14px; height: 14px; border-color: var(--accent); border-style: solid; opacity: 0.5; z-index: 10; }
+  .corner.tl { top: 7px; left: 7px; border-width: 2px 0 0 2px; }
+  .corner.tr { top: 7px; right: 7px; border-width: 2px 2px 0 0; }
+  .corner.bl { bottom: 7px; left: 7px; border-width: 0 0 2px 2px; }
+  .corner.br { bottom: 7px; right: 7px; border-width: 0 2px 2px 0; }
+
+  /* Quality meter on preview */
+  .quality-bar-wrap {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(transparent, rgba(0,0,0,0.8));
+    padding: 12px 8px 6px; z-index: 10;
+  }
+  .quality-label { font-family: 'Space Mono', monospace; font-size: 0.55rem; color: var(--muted); margin-bottom: 3px; display: flex; justify-content: space-between; }
+  .quality-bar { height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
+  .quality-fill { height: 100%; width: 0%; border-radius: 1px; transition: width 0.4s ease, background 0.4s ease; }
+
+  /* Status bar on camera */
+  .status-bar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(transparent, rgba(0,0,0,0.85));
+    padding: 14px 8px 6px; display: flex; align-items: center; gap: 6px;
+    z-index: 10; font-family: 'Space Mono', monospace; font-size: 0.58rem;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
   .dot.recording { background: var(--accent2); animation: pulse 1s infinite; }
   .dot.done { background: var(--success); }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-  #status-text { color: var(--muted); flex: 1; }
-  #frame-counter { font-family: 'Space Mono', monospace; font-size: 0.6rem; color: var(--muted); white-space: nowrap; }
-  .progress-wrap { width: 80px; height: 2px; background: var(--border); border-radius: 2px; overflow: hidden; }
-  .progress-fill { height: 100%; width: 0%; background: var(--accent); border-radius: 2px; box-shadow: 0 0 6px var(--accent); }
+  #status-text { color: var(--muted); font-size: 0.58rem; }
+
+  /* Shake indicator */
+  .shake-indicator {
+    position: absolute; top: 8px; right: 8px;
+    font-family: 'Space Mono', monospace; font-size: 0.55rem;
+    padding: 2px 6px; border-radius: 2px; z-index: 10;
+    background: rgba(0,0,0,0.7); border: 1px solid var(--border);
+    color: var(--muted); display: none;
+  }
+  .shake-indicator.shaking { display: block; border-color: var(--accent2); color: var(--accent2); }
+  .shake-indicator.stable { display: block; border-color: var(--success); color: var(--success); }
+
+  /* Stats row */
+  .stats-row {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+    padding: 8px 10px; display: flex; flex-direction: column; gap: 2px;
+  }
+  .stat-label { font-family: 'Space Mono', monospace; font-size: 0.55rem; color: var(--muted); text-transform: uppercase; }
+  .stat-val { font-family: 'Space Mono', monospace; font-size: 0.9rem; color: var(--accent); }
+  .stat-val.warn { color: var(--accent2); }
+  .stat-val.good { color: var(--success); }
+
+  /* Settings */
   .settings { display: flex; gap: 10px; flex-wrap: wrap; }
   .setting-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 130px; }
   label { font-family: 'Space Mono', monospace; font-size: 0.6rem; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
-  select, input[type=range] { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 7px 10px; border-radius: 4px; font-family: 'Space Mono', monospace; font-size: 0.7rem; width: 100%; appearance: none; cursor: pointer; }
+  select { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 7px 10px; border-radius: 4px; font-family: 'Space Mono', monospace; font-size: 0.7rem; width: 100%; appearance: none; cursor: pointer; }
   select:focus { outline: none; border-color: var(--accent); }
-  input[type=range] { padding: 4px 0; accent-color: var(--accent); }
   .range-row { display: flex; align-items: center; gap: 8px; }
+  input[type=range] { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 4px 0; border-radius: 4px; font-family: 'Space Mono', monospace; width: 100%; appearance: none; cursor: pointer; accent-color: var(--accent); }
+
   .range-val { font-family: 'Space Mono', monospace; font-size: 0.68rem; color: var(--accent); white-space: nowrap; min-width: 30px; text-align: right; }
+
+  /* Controls */
   .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   button { padding: 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-family: 'Space Mono', monospace; font-size: 0.72rem; letter-spacing: 0.04em; cursor: pointer; transition: all 0.15s; text-transform: uppercase; }
   button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 10px rgba(0,229,255,0.15); }
   button:disabled { opacity: 0.3; cursor: not-allowed; }
   button.primary { border-color: var(--accent); color: var(--accent); background: rgba(0,229,255,0.06); }
+  button.stop-btn { border-color: var(--accent2); color: var(--accent2); background: rgba(255,60,110,0.06); animation: border-pulse 1.5s infinite; }
+  @keyframes border-pulse { 0%,100%{box-shadow:0 0 0px rgba(255,60,110,0)} 50%{box-shadow:0 0 10px rgba(255,60,110,0.3)} }
+
+  /* Result */
   #result-section { display: none; flex-direction: column; gap: 10px; }
   #result-section.visible { display: flex; }
   .result-label { font-family: 'Space Mono', monospace; font-size: 0.62rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
   #result-canvas { width: 100%; border: 1px solid var(--border); border-radius: 4px; display: block; }
   .download-btn { display: block; text-align: center; padding: 11px; border: 1px solid var(--success); border-radius: 4px; background: rgba(0,255,170,0.06); color: var(--success); font-family: 'Space Mono', monospace; font-size: 0.72rem; cursor: pointer; text-decoration: none; text-transform: uppercase; }
-  .download-btn:hover { background: rgba(0,255,170,0.12); box-shadow: 0 0 10px rgba(0,255,170,0.2); }
+  .download-btn:hover { background: rgba(0,255,170,0.12); }
+
   .info { border: 1px solid var(--border); border-radius: 4px; padding: 12px 14px; font-size: 0.72rem; color: var(--muted); line-height: 1.7; background: var(--surface); }
   .info b { color: var(--text); font-weight: 400; }
   #capture-canvas { display: none; }
@@ -72,145 +133,270 @@
 <body>
 <header>
   <div class="logo">GHOST<span>CAM</span></div>
+  <span class="ver">v2</span>
   <div class="tagline">// 人が消えるカメラ</div>
 </header>
 <main>
-  <div class="viewfinder">
-    <video id="video" autoplay muted playsinline></video>
-    <canvas class="preview" id="preview-canvas"></canvas>
-    <div class="corner tl"></div><div class="corner tr"></div>
-    <div class="corner bl"></div><div class="corner br"></div>
-    <div class="status-bar">
-      <div class="dot" id="dot"></div>
-      <span id="status-text">カメラ待機中</span>
-      <span id="frame-counter"></span>
-      <div class="progress-wrap"><div class="progress-fill" id="progress"></div></div>
+
+  <!-- Dual viewfinder -->
+  <div class="viewfinders">
+    <div class="vf-wrap">
+      <div class="vf-label">📷 ライブ</div>
+      <div class="viewfinder" id="viewfinder-live">
+        <video id="video" autoplay muted playsinline></video>
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
+        <div class="shake-indicator" id="shake-indicator">SHAKE</div>
+        <div class="status-bar">
+          <div class="dot" id="dot"></div>
+          <span id="status-text">待機中</span>
+        </div>
+      </div>
+    </div>
+    <div class="vf-wrap">
+      <div class="vf-label">👁 プレビュー（リアルタイム合成）</div>
+      <div class="viewfinder preview-vf" id="viewfinder-preview">
+        <canvas id="preview-canvas"></canvas>
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
+        <div class="quality-bar-wrap">
+          <div class="quality-label">
+            <span>クオリティ</span>
+            <span id="quality-pct">—</span>
+          </div>
+          <div class="quality-bar">
+            <div class="quality-fill" id="quality-fill"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="settings">
-    <div class="setting-group">
-      <label>撮影時間</label>
-      <div class="range-row">
-        <input type="range" id="duration" min="3" max="30" value="10" step="1">
-        <span class="range-val" id="duration-val">10s</span>
-      </div>
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat">
+      <div class="stat-label">有効フレーム</div>
+      <div class="stat-val" id="stat-frames">0</div>
     </div>
+    <div class="stat">
+      <div class="stat-label">除外（ブレ）</div>
+      <div class="stat-val warn" id="stat-dropped">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">経過時間</div>
+      <div class="stat-val" id="stat-time">0s</div>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="settings">
     <div class="setting-group">
       <label>FPS</label>
       <select id="fps">
-        <option value="2">2 fps — 軽量</option>
-        <option value="4" selected>4 fps — 標準</option>
-        <option value="8">8 fps — 高精度</option>
+        <option value="1">1 fps — 超軽量</option>
+        <option value="2" selected>2 fps — 推奨</option>
+        <option value="4">4 fps — 高精度</option>
+      </select>
+    </div>
+    <div class="setting-group">
+      <label>ブレ感度（除外しやすさ）</label>
+      <div class="range-row">
+        <input type="range" id="shake-thresh" min="1" max="10" value="5" step="1">
+        <span class="range-val" id="shake-val">5</span>
+      </div>
+    </div>
+    <div class="setting-group">
+      <label>解像度</label>
+      <select id="resolution">
+        <option value="480">480px — 軽量</option>
+        <option value="720" selected>720px — 標準</option>
+        <option value="1080">1080px — 高精度</option>
       </select>
     </div>
   </div>
 
-  <div class="controls">
+  <!-- Controls -->
+  <div class="controls" id="main-controls">
     <button class="primary" id="start-btn" onclick="startCamera()">📷 カメラ起動</button>
     <button id="capture-btn" onclick="startCapture()" disabled>⏺ 撮影開始</button>
   </div>
 
+  <!-- Result -->
   <div id="result-section">
-    <div class="result-label">// 合成結果 — 動くものが消えました</div>
+    <div class="result-label">// 最終合成結果</div>
     <canvas id="result-canvas"></canvas>
     <a class="download-btn" id="download-btn">💾 画像を保存</a>
     <button onclick="resetApp()">↺ もう一度撮る</button>
   </div>
 
   <div class="info">
-    <b>仕組み：</b> 複数フレームの<b>メディアン（中央値）</b>を画素ごとに計算。<br>
-    動く人間 → フレームごとに位置が変わる → 中央値から外れる → <b>消える</b><br>
-    💡 カメラをなるべく固定して撮影するとキレイになります。
+    <b>v2 改善点：</b><br>
+    🔴 <b>手動停止</b> — プレビューを見ながら「消えた」と思ったら止める<br>
+    🚫 <b>ブレ自動除外</b> — 手ブレが大きいフレームを自動でスキップ<br>
+    👁 <b>リアルタイムプレビュー</b> — 数フレームごとに合成結果を更新<br>
+    💡 FPSは低くてOK。時間をかけるほど精度が上がります。
   </div>
 </main>
+
 <canvas id="capture-canvas"></canvas>
 
 <script>
-let stream = null, frames = [], capturing = false, captureInterval = null;
-const video = document.getElementById('video');
+let stream = null, frames = [], capturing = false;
+let captureInterval = null, timerInterval = null;
+let startTime = null, lastFrameData = null;
+let droppedCount = 0, previewUpdateCounter = 0;
+const PREVIEW_UPDATE_EVERY = 3; // フレームごとにプレビュー更新
 
-document.getElementById('duration').addEventListener('input', function() {
-  document.getElementById('duration-val').textContent = this.value + 's';
+const video = document.getElementById('video');
+const previewCanvas = document.getElementById('preview-canvas');
+const captureCanvas = document.getElementById('capture-canvas');
+const pCtx = previewCanvas.getContext('2d');
+
+document.getElementById('shake-thresh').addEventListener('input', function() {
+  document.getElementById('shake-val').textContent = this.value;
 });
 
 async function startCamera() {
   const btn = document.getElementById('start-btn');
-  btn.disabled = true;
-  btn.textContent = '接続中...';
+  btn.disabled = true; btn.textContent = '接続中...';
   const constraints = [
-    { video: { facingMode: { ideal: 'environment' } }, audio: false },
+    { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }, audio: false },
     { video: true, audio: false }
   ];
   for (const c of constraints) {
     try {
       stream = await navigator.mediaDevices.getUserMedia(c);
-      video.srcObject = stream;
-      await video.play();
-      setStatus('カメラ準備完了 — 撮影ボタンを押してください');
-      document.getElementById('capture-btn').disabled = false;
+      video.srcObject = stream; await video.play();
+      setStatus('準備完了'); document.getElementById('capture-btn').disabled = false;
       return;
     } catch(e) { console.warn('constraint failed:', e); }
   }
-  btn.disabled = false;
-  btn.textContent = '📷 カメラ起動';
-  setStatus('❌ カメラにアクセスできません。ブラウザの権限を確認してください。');
+  btn.disabled = false; btn.textContent = '📷 カメラ起動';
+  setStatus('❌ カメラにアクセスできません');
 }
 
 function startCapture() {
   if (capturing) return;
-  capturing = true; frames = [];
-  const duration = parseInt(document.getElementById('duration').value);
+  capturing = true; frames = []; droppedCount = 0;
+  lastFrameData = null; startTime = Date.now();
+
   const fps = parseInt(document.getElementById('fps').value);
-  const totalFrames = duration * fps;
   const interval = 1000 / fps;
-  document.getElementById('capture-btn').disabled = true;
+
+  document.getElementById('capture-btn').textContent = '⏹ 撮影停止';
+  document.getElementById('capture-btn').className = 'stop-btn';
+  document.getElementById('capture-btn').onclick = stopCapture;
   document.getElementById('dot').className = 'dot recording';
-  let frameCount = 0;
+
+  // Timer
+  timerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    document.getElementById('stat-time').textContent = elapsed + 's';
+  }, 500);
+
   captureInterval = setInterval(() => {
-    if (frameCount >= totalFrames) {
-      clearInterval(captureInterval); capturing = false;
-      processFrames(); return;
-    }
-    captureFrame(); frameCount++;
-    const pct = (frameCount / totalFrames) * 100;
-    document.getElementById('progress').style.width = pct + '%';
-    document.getElementById('frame-counter').textContent = frameCount + '/' + totalFrames;
-    setStatus(`REC — ${frameCount}フレーム取得中...`);
+    captureFrameWithShakeDetect();
   }, interval);
 }
 
-function captureFrame() {
-  const canvas = document.getElementById('capture-canvas');
-  const ctx = canvas.getContext('2d');
+function captureFrameWithShakeDetect() {
+  const cCtx = captureCanvas.getContext('2d');
+  const res = parseInt(document.getElementById('resolution').value);
   const w = video.videoWidth || 640, h = video.videoHeight || 480;
-  const scale = Math.min(1, 480 / Math.max(w, h));
-  canvas.width = Math.floor(w * scale);
-  canvas.height = Math.floor(h * scale);
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  frames.push(ctx.getImageData(0, 0, canvas.width, canvas.height).data.slice());
+  const scale = Math.min(1, res / Math.max(w, h));
+  captureCanvas.width = Math.floor(w * scale);
+  captureCanvas.height = Math.floor(h * scale);
+  cCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+
+  const imgData = cCtx.getImageData(0, 0, captureCanvas.width, captureCanvas.height);
+  const frameData = imgData.data;
+
+  // Shake detection: compare average brightness diff with previous frame
+  const shakeThresh = parseInt(document.getElementById('shake-thresh').value);
+  const THRESH_BASE = 8; // base threshold per level
+  const threshold = THRESH_BASE + shakeThresh * 2;
+
+  let isShaking = false;
+  if (lastFrameData && lastFrameData.length === frameData.length) {
+    let totalDiff = 0;
+    const step = 40; // sample every N pixels for speed
+    let count = 0;
+    for (let i = 0; i < frameData.length; i += step * 4) {
+      totalDiff += Math.abs(frameData[i] - lastFrameData[i])
+                 + Math.abs(frameData[i+1] - lastFrameData[i+1])
+                 + Math.abs(frameData[i+2] - lastFrameData[i+2]);
+      count++;
+    }
+    const avgDiff = totalDiff / count / 3;
+    isShaking = avgDiff > threshold;
+
+    // Update shake indicator
+    const ind = document.getElementById('shake-indicator');
+    if (isShaking) {
+      ind.className = 'shake-indicator shaking'; ind.textContent = '⚡ SHAKE';
+    } else {
+      ind.className = 'shake-indicator stable'; ind.textContent = '✓ STABLE';
+    }
+  }
+
+  lastFrameData = frameData.slice();
+
+  if (isShaking) {
+    droppedCount++;
+    document.getElementById('stat-dropped').textContent = droppedCount;
+    setStatus(`ブレ検出 — フレーム除外中 (${droppedCount}枚)`);
+    return;
+  }
+
+  frames.push(frameData.slice());
+  document.getElementById('stat-frames').textContent = frames.length;
+  setStatus(`REC — ${frames.length}フレーム取得済み`);
+
+  // Progressive preview update
+  previewUpdateCounter++;
+  if (frames.length >= 3 && previewUpdateCounter >= PREVIEW_UPDATE_EVERY) {
+    previewUpdateCounter = 0;
+    updatePreview();
+  }
 }
 
-function processFrames() {
-  setStatus('⚙ メディアン計算中...');
-  document.getElementById('dot').className = 'dot';
-  setTimeout(() => {
-    const n = frames.length;
-    if (!n) return;
-    const canvas = document.getElementById('capture-canvas');
-    const w = canvas.width, h = canvas.height;
-    const pixelCount = w * h * 4;
-    const result = new Uint8ClampedArray(pixelCount);
-    const vals = new Array(n);
-    const mid = Math.floor(n / 2);
-    for (let i = 0; i < pixelCount; i += 4) {
-      for (let c = 0; c < 3; c++) {
-        for (let f = 0; f < n; f++) vals[f] = frames[f][i + c];
-        vals.sort((a, b) => a - b);
-        result[i + c] = n % 2 === 1 ? vals[mid] : (vals[mid - 1] + vals[mid]) >> 1;
-      }
-      result[i + 3] = 255;
+function updatePreview(isFinal = false) {
+  const n = frames.length;
+  if (n < 2) return;
+
+  const w = captureCanvas.width, h = captureCanvas.height;
+  const pixelCount = w * h * 4;
+  const result = new Uint8ClampedArray(pixelCount);
+
+  // Use subset for speed during preview (every other frame if many frames)
+  const useFrames = isFinal ? frames : (n > 20 ? frames.filter((_, i) => i % 2 === 0) : frames);
+  const fn = useFrames.length;
+  const mid = Math.floor(fn / 2);
+  const vals = new Array(fn);
+
+  for (let i = 0; i < pixelCount; i += 4) {
+    for (let c = 0; c < 3; c++) {
+      for (let f = 0; f < fn; f++) vals[f] = useFrames[f][i + c];
+      vals.sort((a, b) => a - b);
+      result[i + c] = fn % 2 === 1 ? vals[mid] : (vals[mid - 1] + vals[mid]) >> 1;
     }
+    result[i + 3] = 255;
+  }
+
+  // Draw to preview
+  previewCanvas.width = w; previewCanvas.height = h;
+  pCtx.putImageData(new ImageData(result, w, h), 0, 0);
+  document.getElementById('viewfinder-preview').classList.add('has-preview');
+
+  // Quality meter: more frames = higher quality (caps at ~30 frames for "100%")
+  const quality = Math.min(100, Math.round((n / 30) * 100));
+  const fill = document.getElementById('quality-fill');
+  fill.style.width = quality + '%';
+  fill.style.background = quality < 30 ? 'var(--accent2)' : quality < 60 ? 'var(--accent)' : 'var(--success)';
+  document.getElementById('quality-pct').textContent = quality + '%';
+
+  if (isFinal) {
+    // Copy to result
     const rc = document.getElementById('result-canvas');
     rc.width = w; rc.height = h;
     rc.getContext('2d').putImageData(new ImageData(result, w, h), 0, 0);
@@ -218,22 +404,47 @@ function processFrames() {
     dl.href = rc.toDataURL('image/png');
     dl.download = 'ghostcam_' + Date.now() + '.png';
     document.getElementById('result-section').classList.add('visible');
+  }
+
+  return result;
+}
+
+function stopCapture() {
+  if (!capturing) return;
+  capturing = false;
+  clearInterval(captureInterval);
+  clearInterval(timerInterval);
+
+  document.getElementById('dot').className = 'dot';
+  document.getElementById('shake-indicator').className = 'shake-indicator';
+  document.getElementById('capture-btn').disabled = true;
+  setStatus('⚙ 最終合成中...');
+
+  setTimeout(() => {
+    updatePreview(true);
     document.getElementById('dot').className = 'dot done';
-    document.getElementById('progress').style.width = '100%';
-    setStatus(`✓ 完了 — ${n}フレームからゴーストを消しました`);
+    setStatus(`✓ 完了 — ${frames.length}フレーム合成`);
   }, 50);
 }
 
 function setStatus(msg) { document.getElementById('status-text').textContent = msg; }
 
 function resetApp() {
-  frames = [];
+  frames = []; droppedCount = 0; lastFrameData = null;
   document.getElementById('result-section').classList.remove('visible');
+  document.getElementById('viewfinder-preview').classList.remove('has-preview');
   document.getElementById('capture-btn').disabled = false;
-  document.getElementById('progress').style.width = '0%';
-  document.getElementById('frame-counter').textContent = '';
+  document.getElementById('capture-btn').textContent = '⏺ 撮影開始';
+  document.getElementById('capture-btn').className = '';
+  document.getElementById('capture-btn').onclick = startCapture;
+  document.getElementById('stat-frames').textContent = '0';
+  document.getElementById('stat-dropped').textContent = '0';
+  document.getElementById('stat-time').textContent = '0s';
+  document.getElementById('quality-pct').textContent = '—';
+  document.getElementById('quality-fill').style.width = '0%';
   document.getElementById('dot').className = 'dot';
-  setStatus('カメラ準備完了 — 撮影ボタンを押してください');
+  pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+  setStatus('準備完了');
 }
 </script>
 </body>
