@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GHOST CAM</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400;700&display=swap');
+  :root {
+    --bg: #0a0a0f; --surface: #12121a; --border: #1e1e2e;
+    --accent: #00e5ff; --accent2: #ff3c6e; --text: #e8e8f0;
+    --muted: #5a5a7a; --success: #00ffaa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Noto Sans JP', sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; overflow-x: hidden;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px);
+    pointer-events: none; z-index: 9999;
+  }
+  header { width: 100%; max-width: 680px; padding: 20px 16px 8px; display: flex; align-items: baseline; gap: 12px; }
+  .logo { font-family: 'Space Mono', monospace; font-size: 1.3rem; font-weight: 700; color: var(--accent); text-shadow: 0 0 20px rgba(0,229,255,0.4); }
+  .logo span { color: var(--accent2); }
+  .tagline { font-size: 0.65rem; color: var(--muted); font-family: 'Space Mono', monospace; letter-spacing: 0.05em; }
+  main { width: 100%; max-width: 680px; padding: 0 12px 32px; display: flex; flex-direction: column; gap: 12px; }
+  .viewfinder { position: relative; width: 100%; aspect-ratio: 4/3; background: #000; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .viewfinder video, .viewfinder canvas.preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  canvas.preview { display: none; }
+  .corner { position: absolute; width: 18px; height: 18px; border-color: var(--accent); border-style: solid; opacity: 0.6; z-index: 10; }
+  .corner.tl { top: 10px; left: 10px; border-width: 2px 0 0 2px; }
+  .corner.tr { top: 10px; right: 10px; border-width: 2px 2px 0 0; }
+  .corner.bl { bottom: 10px; left: 10px; border-width: 0 0 2px 2px; }
+  .corner.br { bottom: 10px; right: 10px; border-width: 0 2px 2px 0; }
+  .status-bar { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.85)); padding: 18px 12px 8px; display: flex; align-items: center; gap: 8px; z-index: 10; font-family: 'Space Mono', monospace; font-size: 0.65rem; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .dot.recording { background: var(--accent2); animation: pulse 1s infinite; }
+  .dot.done { background: var(--success); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  #status-text { color: var(--muted); flex: 1; }
+  #frame-counter { font-family: 'Space Mono', monospace; font-size: 0.6rem; color: var(--muted); white-space: nowrap; }
+  .progress-wrap { width: 80px; height: 2px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; width: 0%; background: var(--accent); border-radius: 2px; box-shadow: 0 0 6px var(--accent); }
+  .settings { display: flex; gap: 10px; flex-wrap: wrap; }
+  .setting-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 130px; }
+  label { font-family: 'Space Mono', monospace; font-size: 0.6rem; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+  select, input[type=range] { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 7px 10px; border-radius: 4px; font-family: 'Space Mono', monospace; font-size: 0.7rem; width: 100%; appearance: none; cursor: pointer; }
+  select:focus { outline: none; border-color: var(--accent); }
+  input[type=range] { padding: 4px 0; accent-color: var(--accent); }
+  .range-row { display: flex; align-items: center; gap: 8px; }
+  .range-val { font-family: 'Space Mono', monospace; font-size: 0.68rem; color: var(--accent); white-space: nowrap; min-width: 30px; text-align: right; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  button { padding: 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); font-family: 'Space Mono', monospace; font-size: 0.72rem; letter-spacing: 0.04em; cursor: pointer; transition: all 0.15s; text-transform: uppercase; }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 10px rgba(0,229,255,0.15); }
+  button:disabled { opacity: 0.3; cursor: not-allowed; }
+  button.primary { border-color: var(--accent); color: var(--accent); background: rgba(0,229,255,0.06); }
+  #result-section { display: none; flex-direction: column; gap: 10px; }
+  #result-section.visible { display: flex; }
+  .result-label { font-family: 'Space Mono', monospace; font-size: 0.62rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  #result-canvas { width: 100%; border: 1px solid var(--border); border-radius: 4px; display: block; }
+  .download-btn { display: block; text-align: center; padding: 11px; border: 1px solid var(--success); border-radius: 4px; background: rgba(0,255,170,0.06); color: var(--success); font-family: 'Space Mono', monospace; font-size: 0.72rem; cursor: pointer; text-decoration: none; text-transform: uppercase; }
+  .download-btn:hover { background: rgba(0,255,170,0.12); box-shadow: 0 0 10px rgba(0,255,170,0.2); }
+  .info { border: 1px solid var(--border); border-radius: 4px; padding: 12px 14px; font-size: 0.72rem; color: var(--muted); line-height: 1.7; background: var(--surface); }
+  .info b { color: var(--text); font-weight: 400; }
+  #capture-canvas { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">GHOST<span>CAM</span></div>
+  <div class="tagline">// 人が消えるカメラ</div>
+</header>
+<main>
+  <div class="viewfinder">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas class="preview" id="preview-canvas"></canvas>
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+    <div class="status-bar">
+      <div class="dot" id="dot"></div>
+      <span id="status-text">カメラ待機中</span>
+      <span id="frame-counter"></span>
+      <div class="progress-wrap"><div class="progress-fill" id="progress"></div></div>
+    </div>
+  </div>
+
+  <div class="settings">
+    <div class="setting-group">
+      <label>撮影時間</label>
+      <div class="range-row">
+        <input type="range" id="duration" min="3" max="30" value="10" step="1">
+        <span class="range-val" id="duration-val">10s</span>
+      </div>
+    </div>
+    <div class="setting-group">
+      <label>FPS</label>
+      <select id="fps">
+        <option value="2">2 fps — 軽量</option>
+        <option value="4" selected>4 fps — 標準</option>
+        <option value="8">8 fps — 高精度</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="start-btn" onclick="startCamera()">📷 カメラ起動</button>
+    <button id="capture-btn" onclick="startCapture()" disabled>⏺ 撮影開始</button>
+  </div>
+
+  <div id="result-section">
+    <div class="result-label">// 合成結果 — 動くものが消えました</div>
+    <canvas id="result-canvas"></canvas>
+    <a class="download-btn" id="download-btn">💾 画像を保存</a>
+    <button onclick="resetApp()">↺ もう一度撮る</button>
+  </div>
+
+  <div class="info">
+    <b>仕組み：</b> 複数フレームの<b>メディアン（中央値）</b>を画素ごとに計算。<br>
+    動く人間 → フレームごとに位置が変わる → 中央値から外れる → <b>消える</b><br>
+    💡 カメラをなるべく固定して撮影するとキレイになります。
+  </div>
+</main>
+<canvas id="capture-canvas"></canvas>
+
+<script>
+let stream = null, frames = [], capturing = false, captureInterval = null;
+const video = document.getElementById('video');
+
+document.getElementById('duration').addEventListener('input', function() {
+  document.getElementById('duration-val').textContent = this.value + 's';
+});
+
+async function startCamera() {
+  const btn = document.getElementById('start-btn');
+  btn.disabled = true;
+  btn.textContent = '接続中...';
+  const constraints = [
+    { video: { facingMode: { ideal: 'environment' } }, audio: false },
+    { video: true, audio: false }
+  ];
+  for (const c of constraints) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(c);
+      video.srcObject = stream;
+      await video.play();
+      setStatus('カメラ準備完了 — 撮影ボタンを押してください');
+      document.getElementById('capture-btn').disabled = false;
+      return;
+    } catch(e) { console.warn('constraint failed:', e); }
+  }
+  btn.disabled = false;
+  btn.textContent = '📷 カメラ起動';
+  setStatus('❌ カメラにアクセスできません。ブラウザの権限を確認してください。');
+}
+
+function startCapture() {
+  if (capturing) return;
+  capturing = true; frames = [];
+  const duration = parseInt(document.getElementById('duration').value);
+  const fps = parseInt(document.getElementById('fps').value);
+  const totalFrames = duration * fps;
+  const interval = 1000 / fps;
+  document.getElementById('capture-btn').disabled = true;
+  document.getElementById('dot').className = 'dot recording';
+  let frameCount = 0;
+  captureInterval = setInterval(() => {
+    if (frameCount >= totalFrames) {
+      clearInterval(captureInterval); capturing = false;
+      processFrames(); return;
+    }
+    captureFrame(); frameCount++;
+    const pct = (frameCount / totalFrames) * 100;
+    document.getElementById('progress').style.width = pct + '%';
+    document.getElementById('frame-counter').textContent = frameCount + '/' + totalFrames;
+    setStatus(`REC — ${frameCount}フレーム取得中...`);
+  }, interval);
+}
+
+function captureFrame() {
+  const canvas = document.getElementById('capture-canvas');
+  const ctx = canvas.getContext('2d');
+  const w = video.videoWidth || 640, h = video.videoHeight || 480;
+  const scale = Math.min(1, 480 / Math.max(w, h));
+  canvas.width = Math.floor(w * scale);
+  canvas.height = Math.floor(h * scale);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  frames.push(ctx.getImageData(0, 0, canvas.width, canvas.height).data.slice());
+}
+
+function processFrames() {
+  setStatus('⚙ メディアン計算中...');
+  document.getElementById('dot').className = 'dot';
+  setTimeout(() => {
+    const n = frames.length;
+    if (!n) return;
+    const canvas = document.getElementById('capture-canvas');
+    const w = canvas.width, h = canvas.height;
+    const pixelCount = w * h * 4;
+    const result = new Uint8ClampedArray(pixelCount);
+    const vals = new Array(n);
+    const mid = Math.floor(n / 2);
+    for (let i = 0; i < pixelCount; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        for (let f = 0; f < n; f++) vals[f] = frames[f][i + c];
+        vals.sort((a, b) => a - b);
+        result[i + c] = n % 2 === 1 ? vals[mid] : (vals[mid - 1] + vals[mid]) >> 1;
+      }
+      result[i + 3] = 255;
+    }
+    const rc = document.getElementById('result-canvas');
+    rc.width = w; rc.height = h;
+    rc.getContext('2d').putImageData(new ImageData(result, w, h), 0, 0);
+    const dl = document.getElementById('download-btn');
+    dl.href = rc.toDataURL('image/png');
+    dl.download = 'ghostcam_' + Date.now() + '.png';
+    document.getElementById('result-section').classList.add('visible');
+    document.getElementById('dot').className = 'dot done';
+    document.getElementById('progress').style.width = '100%';
+    setStatus(`✓ 完了 — ${n}フレームからゴーストを消しました`);
+  }, 50);
+}
+
+function setStatus(msg) { document.getElementById('status-text').textContent = msg; }
+
+function resetApp() {
+  frames = [];
+  document.getElementById('result-section').classList.remove('visible');
+  document.getElementById('capture-btn').disabled = false;
+  document.getElementById('progress').style.width = '0%';
+  document.getElementById('frame-counter').textContent = '';
+  document.getElementById('dot').className = 'dot';
+  setStatus('カメラ準備完了 — 撮影ボタンを押してください');
+}
+</script>
+</body>
+</html>
